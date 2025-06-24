@@ -8,9 +8,9 @@ mod encrypt_image;
 use serde_json;
 mod count_rgb;
 mod count_shape;
-use encrypt_image::{create_keys, encrypt_image};
-use count_rgb::count_rgb;
-use count_shape::count_same_shape;
+use encrypt_image::{create_keys, encrypt_image, merge_encrypted_blocks};
+use count_rgb::count_rgb_objects;
+use count_shape::{count_same_shape, count_same_shape_fhe};
 
 fn main() {
     // Parse arguments
@@ -43,19 +43,23 @@ fn main() {
     let img = image::open(img_path).expect("cannot open image");
     let (client_key, server_key) = create_keys();
 
-    // Encrypt image
+    // Encrypt image in blocks
     let blocks = encrypt_image(&img, block_size, &client_key);
+    // Merge blocks back into full encrypted image for analysis
+    let enc_img = merge_encrypted_blocks(&blocks, img.width(), img.height(), &client_key);
 
-    // Reference color (top-left pixel of selected region)
-    let ref_pixel = img.get_pixel(x, y);
+    // Reference color (center pixel of selected region)
+    let cx = x + w / 2;
+    let cy = y + h / 2;
+    let ref_pixel = img.get_pixel(cx, cy);
     let ref_rgb = [
         client_key.encrypt(u64::from(ref_pixel[0])),
         client_key.encrypt(u64::from(ref_pixel[1])),
         client_key.encrypt(u64::from(ref_pixel[2])),
     ];
 
-    let rgb_count = count_rgb(&blocks, ref_rgb, &client_key, &server_key);
-    let shape_count = count_same_shape(&img, (x, y, w, h));
+    let rgb_count = count_rgb_objects(&enc_img, ref_rgb, &client_key, &server_key);
+    let shape_count = count_same_shape_fhe(&img, (x, y, w, h), &client_key, &server_key);
 
     println!(
         "画像の中に、ユーザが選択した物体と同じRGB値の物体は{}個含まれています",
