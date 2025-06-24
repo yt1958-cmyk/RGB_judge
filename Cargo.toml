@@ -1,0 +1,12 @@
+[package]
+name = "RGB_judge"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+tfhe = { version = "0.5", features = ["shortint"] }
+rayon = "1.9"
+image = "0.24"
+imageproc = "0.23"
+serde_json = "1.0"
