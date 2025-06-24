@@ -8,9 +8,9 @@ mod encrypt_image;
 use serde_json;
 mod count_rgb;
 mod count_shape;
-use encrypt_image::{create_keys, encrypt_image, merge_encrypted_blocks};
-use count_rgb::count_rgb_objects;
-use count_shape::{count_same_shape, count_same_shape_fhe};
+use encrypt_image::{create_keys, encrypt_image};
+use count_rgb::count_rgb;
+use count_shape::count_same_shape;
 
 fn main() {
     // Parse arguments
@@ -40,26 +40,30 @@ fn main() {
     let w = sel["w"].as_u64().unwrap() as u32;
     let h = sel["h"].as_u64().unwrap() as u32;
 
+    //画像を読み込む
     let img = image::open(img_path).expect("cannot open image");
+    //暗号化に必要なTFHEのクライアント鍵とサーバ鍵を生成
     let (client_key, server_key) = create_keys();
 
-    // Encrypt image in blocks
+    //画像をブロック単位で分割し、ブロックごとに暗号化
     let blocks = encrypt_image(&img, block_size, &client_key);
-    // Merge blocks back into full encrypted image for analysis
-    let enc_img = merge_encrypted_blocks(&blocks, img.width(), img.height(), &client_key);
 
-    // Reference color (center pixel of selected region)
-    let cx = x + w / 2;
-    let cy = y + h / 2;
-    let ref_pixel = img.get_pixel(cx, cy);
+    //ユーザが指定した左上ピクセルを取り出す
+    let ref_pixel = img.get_pixel(x, y);
+
+    //ユーザが選択したピクセルのRGB値をそれぞれTFHEで暗号化して保存
     let ref_rgb = [
         client_key.encrypt(u64::from(ref_pixel[0])),
         client_key.encrypt(u64::from(ref_pixel[1])),
         client_key.encrypt(u64::from(ref_pixel[2])),
     ];
 
-    let rgb_count = count_rgb_objects(&enc_img, ref_rgb, &client_key, &server_key);
-    let shape_count = count_same_shape_fhe(&img, (x, y, w, h), &client_key, &server_key);
+    //暗号化された画像を使って「この色と同じ物体はいくつ？」を計算
+    let rgb_count = count_rgb(&blocks, ref_rgb, &client_key, &server_key);
+
+
+    //元画像を使って形が同じ物体を数える
+    let shape_count = count_same_shape(&img, (x, y, w, h));
 
     println!(
         "画像の中に、ユーザが選択した物体と同じRGB値の物体は{}個含まれています",
